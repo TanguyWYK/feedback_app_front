@@ -11,8 +11,8 @@ export class FeedbackService
     return await axios.get(url);
   }
 
-  public static async getFeedbacksByManagerId(managerId: number): Promise<AxiosResponse<Feedback[]>> {
-    let url =  `${url_path.server}/feedbacks/manager/${managerId}`;
+  public static async getFeedbacksByManagerId(managerId: number,dateStart: string, dateEnd: string): Promise<AxiosResponse<Feedback[]>> {
+    let url =  `${url_path.server}/feedbacks/manager/${managerId}?start=${dateStart}&end=${dateEnd}`;
     return await axios.get(url);
   }
 
