@@ -1,20 +1,34 @@
 // Utilities
 import { defineStore } from 'pinia'
+import { Member } from '@/models/MemberModel';
+import { Criterion } from '@/models/CriterionModel';
 
 export const useAppStore = defineStore('appStore', {
   state: () => ({
-    manager:{
+    manager: {
       email: '',
       id: 0,
-    }
+    },
+    memberList: <Member[]>([]),
+    criteriaList: <Criterion[]>([]),
+
   }),
   getters: {
     managerId(state) {
-      return state.manager.id
+      return state.manager.id;
     },
     managerEmail(state) {
-      return state.manager.email
+      return state.manager.email;
     },
+    memberEmails(state){
+      return state.memberList.map(member=>member.email);
+    },
+    members(state){
+      return state.memberList;
+    },
+    criteria(state){
+      return state.criteriaList;
+    }
   },
   actions: {
     // any amount of arguments, return a promise or not
@@ -25,5 +39,14 @@ export const useAppStore = defineStore('appStore', {
         id: id,
       }
     },
+    setMembers(members: Member[]){
+      this.memberList = members;
+    },
+    setCriteria(criteria: Criterion[]){
+      this.criteriaList = criteria;
+    },
+    findMemberIdFromEmail(memberEmail: string): number | undefined{
+      return this.memberList.find(member=>member.email === memberEmail)?.id;
+    }
   },
 })

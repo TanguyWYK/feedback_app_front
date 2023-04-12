@@ -1,4 +1,4 @@
-import { Feedback } from '@/models/FeedbackModel';
+import { Feedback_post, Feedback } from '@/models/FeedbackModel';
 import { AxiosResponse } from 'axios';
 import axios from 'axios';
 import { url_path } from '@/api/config'
@@ -19,6 +19,11 @@ export class FeedbackService
   public static async getFeedbacksByMemberId(memberId: number): Promise<AxiosResponse<Feedback[]>> {
     let url =  `${url_path.server}/feedbacks/member/${memberId}`;
     return await axios.get(url);
+  }
+
+  public static async postFeedback(requestBody: Feedback_post): Promise<AxiosResponse<Feedback>> {
+    let url =  `${url_path.server}/feedback`;
+    return await axios.post(url, requestBody);
   }
 
 }
