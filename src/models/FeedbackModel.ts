@@ -13,3 +13,8 @@ export interface Feedback_post {
   managerId: number;
   value: number;
 }
+
+export interface Feedback_patch {
+  id: number;
+  value: number;
+}

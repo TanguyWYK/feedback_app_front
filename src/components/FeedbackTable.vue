@@ -34,21 +34,28 @@
         <tr>
           <td
             v-for="header in headers"
-            @mouseover="editFeedback(item.columns[header.key])"
+            @click="editFeedback(item.columns[header.key])"
           >
-            <input
-              v-if="isTdInEdition(item.columns[header.key])"
-              type="text"
-              class="feedback-input"
-              @blur="saveFeedback(item.columns[header.key], $event)"
-            />
-            <p v-else>
+            <p
+              v-if="!item.columns[header.key].edit"
+              :class="
+                item.columns[header.key].action !== undefined ? 'pointer' : ''
+              "
+            >
               {{
-                item.columns[header.key].value
+                item.columns[header.key].action !== undefined
                   ? item.columns[header.key].value
                   : item.columns[header.key]
               }}
             </p>
+            <input
+              v-else
+              type="text"
+              class="feedback-input"
+              autofocus
+              @mouseleave="saveFeedback(item.columns[header.key], $event)"
+              @mouseenter="focusInput($event)"
+            />
           </td>
         </tr>
       </template>
@@ -62,27 +69,22 @@ import { FeedbackService } from "../api/services/FeedbackService";
 import { VDataTable } from "vuetify/labs/VDataTable";
 import { onMounted } from "vue";
 import { Criterion } from "@/models/CriterionModel";
-import { Feedback_post } from "@/models/FeedbackModel";
+import { Feedback_post, Feedback_patch } from "@/models/FeedbackModel";
 import { useAppStore } from "../store/appStore";
 import { computed } from "@vue/reactivity";
+import { Member } from "@/models/MemberModel";
+import { Feedback } from "@/models/FeedbackModel";
 
 const store = useAppStore();
 const feedbacks = ref({});
 const feedbacksFiltered = computed(() => {
   if (feedbacks.value[month.value] !== undefined) {
-    return Object.values(feedbacks.value[month.value]);
+    return Object.values(feedbacks.value[month.value]).sort((a, b) => {
+      return a.memberEmail < b.memberEmail ? -1 : 1;
+    });
   } else {
     return generateEmptyTable();
   }
-});
-const addFeedbackInput = ref({
-  criterionId: 0,
-  memberId: "",
-  value: 0,
-});
-
-const editFeedbackInput = ref({
-  id: 0,
 });
 
 const month = ref(getDateNow());
@@ -125,7 +127,7 @@ function getDateNow() {
 }
 
 function getFeedbacksByManagerId(managerId: number) {
-  let dateStart = "20230301";
+  let dateStart = "20230101";
   let dateEnd = "20230401";
   FeedbackService.getFeedbacksByManagerId(managerId, dateStart, dateEnd).then(
     (response: any) => {
@@ -141,6 +143,8 @@ function getFeedbacksByManagerId(managerId: number) {
           line[feedback.criterionId] = {
             value: feedback.value,
             id: feedback.id,
+            action: "patch",
+            edit: false,
           };
           rowToShows[feedback.date][feedback.memberEmail] = line;
           rowToShows[feedback.date][feedback.memberEmail].memberEmail =
@@ -150,7 +154,12 @@ function getFeedbacksByManagerId(managerId: number) {
         } else {
           rowToShows[feedback.date][feedback.memberEmail][
             feedback.criterionId
-          ] = { value: feedback.value, id: feedback.id };
+          ] = {
+            value: feedback.value,
+            id: feedback.id,
+            action: "patch",
+            edit: false,
+          };
         }
         for (let member of store.members) {
           if (rowToShows[feedback.date][member.email] === undefined) {
@@ -170,13 +179,14 @@ function getFeedbacksByManagerId(managerId: number) {
                 value: "-",
                 criterionId: Number(header.key),
                 memberId: store.findMemberIdFromEmail(memberEmail),
+                action: "post",
+                edit: false,
               };
             }
           }
         }
       }
       feedbacks.value = rowToShows;
-      console.log(rowToShows);
       dataIsLoaded.value = true;
     }
   );
@@ -207,47 +217,64 @@ function generateEmptyTable() {
         managerEmail: store.managerEmail,
       };
       for (let criterion of store.criteria) {
-        rowToShows[memberEmail][criterion.id] = "-";
+        rowToShows[memberEmail][criterion.id] = {
+          value: "-",
+          criterionId: criterion.id,
+          memberId: store.findMemberIdFromEmail(memberEmail),
+          action: "post",
+          edit: false,
+        };
       }
     }
-    console.log(rowToShows);
-    return Object.values(rowToShows);
+    return Object.values(rowToShows).sort((a, b) => {
+      return a.memberEmail < b.memberEmail ? -1 : 1;
+    });
   } else {
     return [];
   }
 }
 
 function editFeedback(feedback: any) {
-  if (feedback.value) {
-    if (feedback.id === undefined) {
-      addFeedbackInput.value.criterionId = feedback.criterionId;
-      addFeedbackInput.value.memberId = feedback.memberId;
-    } else {
-      console.log("put", feedback);
+  if (feedback.action) {
+    feedback.edit = true;
+  }
+}
+
+function saveFeedback(feedback: any, event: any) {
+  feedback.edit = false;
+  if (event.target.value !== "") {
+    if (
+      feedback.action === "post" &&
+      Number(event.target.value) !== feedback.value
+    ) {
+      const paylaod: Feedback_post = {
+        date: month.value,
+        criterionId: feedback.criterionId,
+        memberId: feedback.memberId,
+        managerId: store.managerId,
+        value: Number(event.target.value),
+      };
+      FeedbackService.postFeedback(paylaod).then((response) => {
+        console.log(response);
+        feedback.value = response.data.value;
+        feedback.id = response.data.id;
+        feedback.action = "patch";
+      });
+    } else if (feedback.action === "patch") {
+      const paylaod: Feedback_patch = {
+        id: feedback.id,
+        value: Number(event.target.value),
+      };
+      FeedbackService.patchFeedback(paylaod).then((response) => {
+        console.log(response);
+        feedback.value = response.data.value;
+      });
     }
   }
 }
-function saveFeedback(feedback: any, event: any) {
-  let paylaod: Feedback_post = {
-    date: month.value,
-    criterionId: feedback.criterionId,
-    memberId: feedback.memberId,
-    managerId: store.managerId,
-    value: Number(event.target.value),
-  };
-  FeedbackService.postFeedback(paylaod).then((response) => {
-    console.log(response);
-  });
-}
 
-function isTdInEdition(td: any) {
-  if (
-    addFeedbackInput.value.criterionId === td.criterionId &&
-    addFeedbackInput.value.memberId === td.memberId
-  ) {
-    return true;
-  }
-  return false;
+function focusInput(event: any) {
+  event.srcElement.focus();
 }
 </script>
 <style lang="scss" scoped>
@@ -270,7 +297,14 @@ function isTdInEdition(td: any) {
 }
 
 .feedback-input {
-  width: 50px;
-  border: 1px black solid;
+  width: 70px;
+  text-align: center;
+  height: 100%;
+  border: 1px solid black;
+  border-radius: 2px;
+}
+
+.pointer {
+  cursor: pointer;
 }
 </style>
