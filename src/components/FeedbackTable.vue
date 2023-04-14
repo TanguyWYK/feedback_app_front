@@ -52,7 +52,6 @@
               v-else
               type="text"
               class="feedback-input"
-              autofocus
               @mouseleave="saveFeedback(item.columns[header.key], $event)"
               @mouseenter="focusInput($event)"
             />
@@ -74,6 +73,8 @@ import { useAppStore } from "../store/appStore";
 import { computed } from "@vue/reactivity";
 import { Member } from "@/models/MemberModel";
 import { Feedback } from "@/models/FeedbackModel";
+import { useFeedbackMapper } from "./../composables/useFeedbackMapper";
+import { cp } from "fs";
 
 const store = useAppStore();
 const feedbacks = ref({});
@@ -89,11 +90,6 @@ const feedbacksFiltered = computed(() => {
 
 const month = ref(getDateNow());
 const monthTitle = computed(() => getMonthAndYearFromDate(month.value));
-type headerValue = {
-  title: String;
-  key: String | number;
-  sortable?: boolean;
-};
 const headers = ref(<headerValue[]>[
   {
     title: "ID",
@@ -127,66 +123,15 @@ function getDateNow() {
 }
 
 function getFeedbacksByManagerId(managerId: number) {
-  let dateStart = "20230101";
-  let dateEnd = "20230401";
+  let dateStart = getDateNow();
+  let dateEnd = getDateNow();
   FeedbackService.getFeedbacksByManagerId(managerId, dateStart, dateEnd).then(
     (response: any) => {
-      let result = response.data;
-      console.log(result);
-      let rowToShows = {};
-      for (let feedback of result) {
-        rowToShows[feedback.date] = {};
-      }
-      for (let feedback of result) {
-        if (rowToShows[feedback.date][feedback.memberEmail] === undefined) {
-          let line = {};
-          line[feedback.criterionId] = {
-            value: feedback.value,
-            id: feedback.id,
-            action: "patch",
-            edit: false,
-          };
-          rowToShows[feedback.date][feedback.memberEmail] = line;
-          rowToShows[feedback.date][feedback.memberEmail].memberEmail =
-            feedback.memberEmail;
-          rowToShows[feedback.date][feedback.memberEmail].managerEmail =
-            feedback.managerEmailThisMonth;
-        } else {
-          rowToShows[feedback.date][feedback.memberEmail][
-            feedback.criterionId
-          ] = {
-            value: feedback.value,
-            id: feedback.id,
-            action: "patch",
-            edit: false,
-          };
-        }
-        for (let member of store.members) {
-          if (rowToShows[feedback.date][member.email] === undefined) {
-            rowToShows[feedback.date][member.email] = {
-              memberEmail: member.email,
-              memberId: member.id,
-              managerEmail: store.managerEmail,
-            };
-          }
-        }
-      }
-      for (let month in rowToShows) {
-        for (let memberEmail in rowToShows[month]) {
-          for (let header of headers.value) {
-            if (rowToShows[month][memberEmail][header.key] === undefined) {
-              rowToShows[month][memberEmail][header.key] = {
-                value: "-",
-                criterionId: Number(header.key),
-                memberId: store.findMemberIdFromEmail(memberEmail),
-                action: "post",
-                edit: false,
-              };
-            }
-          }
-        }
-      }
-      feedbacks.value = rowToShows;
+      feedbacks.value = useFeedbackMapper(
+        response.data,
+        headers.value,
+        month.value
+      );
       dataIsLoaded.value = true;
     }
   );
@@ -200,6 +145,32 @@ function changeMonth(incrementMonth: number) {
     y += incrementMonth;
   }
   month.value = [y, ("0" + m).slice(-2), "01"].join("-");
+  if (!Object.keys(feedbacks.value).includes(month.value)) {
+    console.log("request " + month.value);
+    FeedbackService.getFeedbacksByManagerId(
+      store.managerId,
+      month.value,
+      lastDayOfMonth(month.value)
+    ).then((response: any) => {
+      feedbacks.value[month.value] = useFeedbackMapper(
+        response.data,
+        headers.value,
+        month.value
+      )[month.value];
+    });
+  }
+}
+
+function lastDayOfMonth(date: string) {
+  let [y, m, d] = date.split("-");
+  const getDaysInMonth = (m, y) => {
+    return m === 2
+      ? y & 3 || (!(y % 25) && y & 15)
+        ? 28
+        : 29
+      : 30 + ((m + (m >> 3)) & 1);
+  };
+  return [y, m, getDaysInMonth(Number(m), Number(y))].join("-");
 }
 
 function getMonthAndYearFromDate(dateToConvert: string): string {
